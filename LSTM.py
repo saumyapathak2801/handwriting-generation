@@ -64,12 +64,15 @@ class Model():
         
         def build_computational_graph(self, inputs, cell, initial_cell_state, scope):
             output, cell_final_state = tf.contrib.legacy_seq2seq.rnn_decoder(inputs, initial_cell_state, cell, loop_function=None, scope=scope)
-            return output
+            return output, cell_final_state
         
-        with tf.variable_scope(tf.get_variable_scope(),reuse=False):
-            outs_layer0 = build_computational_graph(self, input_to_model, self.cell0, self.istate_cell0, 'cell0')
-            outs_layer1 = build_computational_graph(self, outs_layer0, self.cell1, self.istate_cell1, 'cell1')
-            outs_layer2 = build_computational_graph(self, outs_layer1, self.cell2, self.istate_cell2, 'cell2')
+#         with tf.variable_scope(tf.get_variable_scope(),reuse=False):
+#             outs_layer0 = build_computational_graph(self, input_to_model, self.cell0, self.istate_cell0, 'cell0')
+#             outs_layer1 = build_computational_graph(self, outs_layer0, self.cell1, self.istate_cell1, 'cell1')
+#             outs_layer2 = build_computational_graph(self, outs_layer1, self.cell2, self.istate_cell2, 'cell2')
+        outs_layer0, self.cell0_final_state = build_computational_graph(self, input_to_model, self.cell0, self.istate_cell0, 'cell0')
+        outs_layer1, self.cell1_final_state = build_computational_graph(self, outs_layer0, self.cell1, self.istate_cell1, 'cell1')
+        outs_layer2, self.cell2_final_state = build_computational_graph(self, outs_layer1, self.cell2, self.istate_cell2, 'cell2')
         
         # The output of final layer goes into MDN
         # for each output we predict 6 parameters + 1 eos for "nmixture" mixture density components
@@ -91,15 +94,15 @@ class Model():
         loss = get_loss(self.pi, output_x, output_y, eos_data, self.mu1, self.mu2, self.sigma1, self.sigma2, self.rho, self.eos)
         self.cost = loss / (self.batch_size * self.tsteps) # J = 1/m*sum(Loss) , m = number of training examples
         
-#         tvars = tf.trainable_variables()
-#         grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars), self.grad_clip)
-#         self.train_op = self.optimizer.apply_gradients(zip(grads, tvars))
+        
         
         self.learning_rate = tf.Variable(0.0, trainable=False)
         self.decay = tf.Variable(0.0, trainable=False)
         self.momentum = tf.Variable(0.0, trainable=False)
-        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, decay=self.decay, momentum=self.momentum)
-
+        #self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, decay=self.decay, momentum=self.momentum)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+#         tvars = tf.trainable_variables()
+#         grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars), self.grad_clip)
 #         self.train_op = self.optimizer.apply_gradients(zip(grads, tvars))
         self.train_op = self.optimizer.minimize(self.cost)
 

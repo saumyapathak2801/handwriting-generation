@@ -29,8 +29,8 @@ def sample(input_text, model, args):
 
     finished = False ; i = 0
     while not finished:
-        feed = {model.input_data: prev_x,                 model.istate_cell0.c: c0, model.istate_cell1.c: c1, model.istate_cell2.c: c2,                 model.istate_cell0.h: h0, model.istate_cell1.h: h1, model.istate_cell2.h: h2}
-        fetch = [model.pi_hat, model.mu1, model.mu2, model.sigma1_hat, model.sigma2_hat, model.rho, model.eos,                  model.fstate_cell0.c, model.fstate_cell1.c, model.fstate_cell2.c,                 model.fstate_cell0.h, model.fstate_cell1.h, model.fstate_cell2.h]
+        feed = {model.input: prev_x,                 model.istate_cell0.c: c0, model.istate_cell1.c: c1, model.istate_cell2.c: c2,                 model.istate_cell0.h: h0, model.istate_cell1.h: h1, model.istate_cell2.h: h2}
+        fetch = [model.pi_hat, model.mu1, model.mu2, model.sigma1_hat, model.sigma2_hat, model.rho, model.eos,                  model.cell0_final_state.c, model.cell1_final_state.c, model.cell2_final_state.c,                 model.cell0_final_state.h, model.cell1_final_state.h, model.cell1_final_state.h]
         [pi_hat, mu1, mu2, sigma1_hat, sigma2_hat, rho, eos,                  c0, c1, c2, h0, h1, h2] = model.sess.run(fetch, feed)
         
         #bias stuff:
@@ -45,16 +45,16 @@ def sample(input_text, model, args):
         x1, x2 = sample_gaussian2d(mu1[0][idx], mu2[0][idx], sigma1[0][idx], sigma2[0][idx], rho[0][idx])
             
         # store the info at this time step
-        windows.append(window)
-        phis.append(phi[0])
-        kappas.append(kappa[0].T)
+#         windows.append(window)
+#         phis.append(phi[0])
+#         kappas.append(kappa[0].T)
         pis.append(pi[0])
         strokes.append([mu1[0][idx], mu2[0][idx], sigma1[0][idx], sigma2[0][idx], rho[0][idx], eos])
         
         # test if finished (has the read head seen the whole ascii sequence?)
         # main_kappa_idx = np.where(alpha[0]==np.max(alpha[0]));
         # finished = True if kappa[0][main_kappa_idx] > len(input_text) else False
-        finished = True if i > args.tsteps else False
+        finished = True if i > args['tsteps'] else False
         
         # new input is previous output
         prev_x[0][0] = np.array([x1, x2, eos], dtype=np.float32)
@@ -66,6 +66,21 @@ def sample(input_text, model, args):
     strokes[:,:2] = np.cumsum(strokes[:,:2], axis=0)
     return strokes
 
+def bivariate_normal(X, Y, sigmax=1.0, sigmay=1.0,
+                     mux=0.0, muy=0.0, sigmaxy=0.0):
+    """
+    Bivariate Gaussian distribution for equal shape *X*, *Y*.
+    See `bivariate normal
+    <http://mathworld.wolfram.com/BivariateNormalDistribution.html>`_
+    at mathworld.
+    """
+    Xmu = X-mux
+    Ymu = Y-muy
+
+    rho = sigmaxy/(sigmax*sigmay)
+    z = Xmu**2/sigmax**2 + Ymu**2/sigmay**2 - 2*rho*Xmu*Ymu/(sigmax*sigmay)
+    denom = 2*np.pi*sigmax*sigmay*np.sqrt(1-rho**2)
+    return np.exp(-z/(2*(1-rho**2))) / denom
 
 # a heatmap for the probabilities of each pen point in the sequence
 def gauss_plot(strokes, title, figsize = (20,2), save_path='.'):
@@ -85,7 +100,7 @@ def gauss_plot(strokes, title, figsize = (20,2), save_path='.'):
     X, Y = np.meshgrid(x, y)
     Z = np.zeros_like(X)
     for i in range(strokes.shape[0]):
-        gauss = mlab.bivariate_normal(X, Y, mux=strokes[i,0], muy=strokes[i,1],             sigmax=strokes[i,2], sigmay=strokes[i,3], sigmaxy=0) # sigmaxy=strokes[i,4] gives error
+        gauss = bivariate_normal(X, Y, mux=strokes[i,0], muy=strokes[i,1],             sigmax=strokes[i,2], sigmay=strokes[i,3], sigmaxy=0) # sigmaxy=strokes[i,4] gives error
         Z += gauss/(np.max(gauss) + epsilon)
 
     plt.title(title, fontsize=20)
