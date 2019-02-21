@@ -19,11 +19,13 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 class DataProcess():
-    def __init__(self):
+    def __init__(self, args):
         self.rootDir = "./data"
-        self.batch_size = 32
+        self.batch_size = args['batch_size']
         self.index_pointer = 0
-        self.timesteps = 256
+        self.timesteps = args['tsteps']
+        self.scale_factor = args['scale_factor']
+        self.gap = args['gap']
         
         stroke_dir = self.rootDir
         data_file = os.path.join(self.rootDir, "strokes_training_data.cpkl")
@@ -43,14 +45,21 @@ class DataProcess():
         
         for i in range(len(self.raw_stroke_data)):
             data = self.raw_stroke_data[i]
-            if i%20 == 0:
-                self.valid_stroke_data.append(data)
-            else:
-                self.stroke_data.append(data)
+            if (len(data) > self.timesteps + 2):
+                # removes large gaps from the data
+                data = np.minimum(data, self.gap)
+                data = np.maximum(data, -self.gap)
+                data[:,0:2] /= self.scale_factor
+                if i%20 == 0:
+                    self.valid_stroke_data.append(data)
+                else:
+                    self.stroke_data.append(data)
         # TODO : Do normalisation here.
         self.num_batches = int(len(self.stroke_data)/self.batch_size)
         print("Number of data examples:",  len(self.stroke_data))
         print("Batch size for dataset", self.num_batches)
+
+
         
     def init_batch_comp(self):
         self.index_perm = np.random.permutation(len(self.stroke_data))
@@ -78,7 +87,7 @@ class DataProcess():
             self.index_pointer += 1
             if(self.index_pointer >= len(self.stroke_data)):
                 self.init_batch_comp()   
-        print(x_batch[0][0], y_batch[0][0], x_batch[0][1], y_batch[0][1])        
+#         print(x_batch[0][0], y_batch[0][0], x_batch[0][1], y_batch[0][1])        
         return x_batch, y_batch         
             
         
@@ -157,7 +166,7 @@ class DataProcess():
 # In[6]:
 
 
-d = DataProcess()
+# d = DataProcess()
 
 
 # In[ ]:
@@ -169,7 +178,7 @@ d = DataProcess()
 # In[48]:
 
 
-d.init_batch_comp()
+# d.init_batch_comp()
 
 
 # In[7]:
@@ -191,12 +200,12 @@ def line_plot(strokes, title):
 # In[8]:
 
 
-x, y = d.get_next_batch()
-for i in range(d.batch_size):
-    r = x[i]
-    strokes = r.copy()
-    strokes[:,:-1] = np.cumsum(r[:,:-1], axis=0)
-    line_plot(strokes, "Batch plots")
+# x, y = d.get_next_batch()
+# for i in range(d.batch_size):
+#     r = x[i]
+#     strokes = r.copy()
+#     strokes[:,:-1] = np.cumsum(r[:,:-1], axis=0)
+#     line_plot(strokes, "Batch plots")
 
 
 # In[52]:
