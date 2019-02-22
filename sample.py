@@ -20,13 +20,13 @@ def get_style_states(model, args):
     return [c0, c1, c2, h0, h1, h2] 
 
 
-def sample(input_text, model, args):
+def sample(model, args):
     # initialize some parameters
     [c0, c1, c2, h0, h1, h2] = get_style_states(model, args) # get numpy zeros states for all three LSTMs
     prev_x = np.asarray([[[0, 0, 1]]], dtype=np.float32)     # start with a pen stroke at (0,0)
 
-    strokes, pis, windows, phis, kappas = [], [], [], [], [] # the data we're going to generate will go here
-
+    strokes, pis, windows, phis, kappas, char_to_plot = [], [], [], [], [], [] # the data we're going to generate will go here
+    args['tsteps'] = 1000
     finished = False ; i = 0
     while not finished:
         feed = {model.input: prev_x,                 model.istate_cell0.c: c0, model.istate_cell1.c: c1, model.istate_cell2.c: c2,                 model.istate_cell0.h: h0, model.istate_cell1.h: h1, model.istate_cell2.h: h2}
@@ -41,6 +41,7 @@ def sample(input_text, model, args):
         
         # choose a component from the MDN
         idx = np.random.choice(pi.shape[1], p=pi[0])
+        a = eos[0][0]
         eos = 1 if 0.35 < eos[0][0] else 0 # use 0.5 as arbitrary boundary
         x1, x2 = sample_gaussian2d(mu1[0][idx], mu2[0][idx], sigma1[0][idx], sigma2[0][idx], rho[0][idx])
             
@@ -49,7 +50,10 @@ def sample(input_text, model, args):
 #         phis.append(phi[0])
 #         kappas.append(kappa[0].T)
         pis.append(pi[0])
+        print([mu1[0][idx], mu2[0][idx], sigma1[0][idx], sigma2[0][idx], rho[0][idx], a])
+#         strokes.append([x1, x2, eos])
         strokes.append([mu1[0][idx], mu2[0][idx], sigma1[0][idx], sigma2[0][idx], rho[0][idx], eos])
+        char_to_plot.append([x1, x2, eos])
         
         # test if finished (has the read head seen the whole ascii sequence?)
         # main_kappa_idx = np.where(alpha[0]==np.max(alpha[0]));
@@ -61,10 +65,12 @@ def sample(input_text, model, args):
         i+=1
 
     strokes = np.vstack(strokes)
+    char_to_plot = np.vstack(char_to_plot)
 
     # the network predicts the displacements between pen points, so do a running sum over the time dimension
     strokes[:,:2] = np.cumsum(strokes[:,:2], axis=0)
-    return strokes
+    char_to_plot[:,:2] = np.cumsum(char_to_plot[:,:2], axis=0)
+    return strokes, char_to_plot
 
 def bivariate_normal(X, Y, sigmax=1.0, sigmay=1.0,
                      mux=0.0, muy=0.0, sigmaxy=0.0):
@@ -124,4 +130,59 @@ def line_plot(strokes, title, figsize = (20,2), save_path='.'):
     plt.gca().invert_yaxis()
     plt.savefig(save_path)
     plt.clf() ; plt.cla()
+
+def line_plot3(strokes, char_to_plot, title, figsize = (20,2), save_path='.'):
+    import matplotlib as mpl
+    mpl.use('Agg')
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=figsize)
+    eos_preds = np.where(strokes[:,-1] == 1)
+    eos_preds = [0] + list(eos_preds[0]) + [-1] #add start and end indices
+    for i in range(len(eos_preds)-1):
+        start = eos_preds[i]+1
+        stop = eos_preds[i+1]
+        plt.plot(char_to_plot[start:stop,0], char_to_plot[start:stop,1],'b-', linewidth=2.0) #draw a stroke
+    plt.title(title,  fontsize=20)
+    plt.gca().invert_yaxis()
+    plt.savefig(save_path)
+    plt.clf() ; plt.cla()
+    
+def get_bounds(data, factor):
+    min_x = 0
+    max_x = 0
+    min_y = 0
+    max_y = 0
+
+    abs_x = 0
+    abs_y = 0
+    for i in range(len(data)):
+        x = float(data[i, 0]) / factor
+        y = float(data[i, 1]) / factor
+        abs_x += x
+        abs_y += y
+        min_x = min(min_x, abs_x)
+        min_y = min(min_y, abs_y)
+        max_x = max(max_x, abs_x)
+        max_y = max(max_y, abs_y)
+
+    return (min_x, max_x, min_y, max_y)
+
+def line_plot2(data, title, figsize = (20,2), save_path='.', factor = 50):
+    import matplotlib as mpl
+    mpl.use('Agg')
+    import matplotlib.pyplot as plt
+    min_x, max_x, min_y, max_y = get_bounds(data, factor)
+    dims = (50 + max_x - min_x, 50 + max_y - min_y)
+    plt.figure(figsize=dims)
+    eos_preds = np.where(data[:,-1] == 1)
+    eos_preds = [0] + list(eos_preds[0]) + [-1] #add start and end indices
+    for i in range(len(eos_preds)-1):
+        start = eos_preds[i]+1
+        stop = eos_preds[i+1]
+        plt.plot(data[start:stop,0], data[start:stop,1],'b-', linewidth=2.0) #draw a stroke
+    plt.title(title,  fontsize=20)
+    plt.gca().invert_yaxis()
+    plt.savefig(save_path)
+    plt.clf() ; plt.cla()
+
 

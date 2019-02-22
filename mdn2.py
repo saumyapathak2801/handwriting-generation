@@ -23,7 +23,6 @@ def get_mdn_coef(model, Z):
     mu1 = mu1_hat; mu2 = mu2_hat # leave mu1, mu2 as they are
     sigma1 = tf.exp(sigma1_hat); sigma2 = tf.exp(sigma2_hat) # exp for sigmas
     rho = tf.tanh(rho_hat) # tanh for rho (squish between -1 and 1)rrr
-
     return [eos, pi, mu1, mu2, sigma1, sigma2, rho]
 
 def gaussian2d(x1, x2, mu1, mu2, s1, s2, rho):
@@ -45,7 +44,7 @@ def get_loss(pi, x1_data, x2_data, eos_data, mu1, mu2, sigma1, sigma2, rho, eos)
     term1 = -tf.log(tf.maximum(term1, 1e-20)) # some errors are zero -> numerical errors.
 
     term2 = tf.multiply(eos, eos_data) + tf.multiply(1-eos, 1-eos_data) #modified Bernoulli -> eos probability
-    term2 = -tf.log(term2) #negative log error gives loss
+    term2 = -tf.log(tf.maximum(term2, 1e-10)) #negative log error gives loss
 
     return tf.reduce_sum(term1 + term2) #do outer summation
 

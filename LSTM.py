@@ -28,14 +28,16 @@ class Model():
         self.args = args
         self.graves_initializer = tf.truncated_normal_initializer(mean=0., stddev=.075, seed=None, dtype=tf.float32)
         self.window_b_initializer = tf.truncated_normal_initializer(mean=-3.0, stddev=.25, seed=None, dtype=tf.float32)
-        self.learning_rate = 0.001
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+#         self.learning_rate = args['learning_rate']
+#         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.tsteps = args['tsteps']
         self.num_mixtures = args['num_mixtures']
         self.rnn_size = args['rnn_size']
         self.batch_size = args['batch_size']
         self.biases = args['biases']
         self.grad_clip = args['grad_clip']
+        self.train = args['train']
+        self.dropout_prob = args['dropout_prob']
         
         # Build an LSTM cell, each cell has rnn_size number of units
         with tf.variable_scope(tf.get_variable_scope(),reuse=False):
@@ -43,6 +45,11 @@ class Model():
             self.cell0 = cell_func(args['rnn_size'], state_is_tuple=True, initializer=self.graves_initializer)
             self.cell1 = cell_func(args['rnn_size'], state_is_tuple=True, initializer=self.graves_initializer)
             self.cell2 = cell_func(args['rnn_size'], state_is_tuple=True, initializer=self.graves_initializer)
+            
+            if (self.train and self.dropout_prob < 1): # training mode
+                self.cell0 = tf.contrib.rnn.DropoutWrapper(self.cell0, output_keep_prob = self.dropout_prob)
+                self.cell1 = tf.contrib.rnn.DropoutWrapper(self.cell1, output_keep_prob = self.dropout_prob)
+                self.cell2 = tf.contrib.rnn.DropoutWrapper(self.cell2, output_keep_prob = self.dropout_prob)
         
         self.sess = tf.InteractiveSession()
         self.sess.run(tf.global_variables_initializer())
@@ -96,15 +103,16 @@ class Model():
         
         
         
-        self.learning_rate = tf.Variable(0.0, trainable=False)
+        self.learning_rate = tf.Variable(0.001, trainable=False)
         self.decay = tf.Variable(0.0, trainable=False)
+#         self.rate = tf.train.exponential_decay(0.15, self.decay, 0.9999)
         self.momentum = tf.Variable(0.0, trainable=False)
-        #self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, decay=self.decay, momentum=self.momentum)
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-#         tvars = tf.trainable_variables()
-#         grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars), self.grad_clip)
-#         self.train_op = self.optimizer.apply_gradients(zip(grads, tvars))
-        self.train_op = self.optimizer.minimize(self.cost)
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, decay=self.decay, momentum=self.momentum)
+#         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        tvars = tf.trainable_variables()
+        grads, _ = tf.clip_by_global_norm(tf.gradients(self.cost, tvars), self.grad_clip)
+        self.train_op = self.optimizer.apply_gradients(zip(grads, tvars))
+#         self.train_op = self.optimizer.minimize(self.cost)
 
     
     
